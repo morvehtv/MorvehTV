@@ -10,16 +10,26 @@ android {
         applicationId = "com.morvehtv.tv"
         minSdk = 21
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+    }
+
+    signingConfigs {
+        create("morvehtv") {
+            storeFile = rootProject.file("morvehtv.jks")
+            storePassword = "morvehtv2026"
+            keyAlias = "morvehtv"
+            keyPassword = "morvehtv2026"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Firmado con la clave de depuración para poder instalarlo directamente en la tele.
-            // Para publicarlo en Google Play, crea tu propia clave (ver README).
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("morvehtv")
         }
     }
 
