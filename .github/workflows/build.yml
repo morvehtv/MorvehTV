@@ -33,6 +33,15 @@ jobs:
         with:
           name: MorvehTV-apk
           path: MorvehTV.apk
+      # Si una publicación anterior se quedó a medias (borrador vacío), se borra antes de publicar.
+      - name: Limpiar borrador atascado
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v$VERSION" --json isDraft -q .isDraft 2>/dev/null | grep -q true; then
+            gh release delete "v$VERSION" --yes
+          fi
       # Publica (o actualiza) la release con el número de versión de la app (versionName).
       - name: Publicar release
         if: github.ref == 'refs/heads/main'
