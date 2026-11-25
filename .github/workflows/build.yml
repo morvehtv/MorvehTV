@@ -33,22 +33,26 @@ jobs:
         with:
           name: MorvehTV-apk
           path: MorvehTV.apk
-      # Si una publicación anterior se quedó a medias (borrador vacío), se borra antes de publicar.
-      - name: Limpiar borrador atascado
+      # Publica (o actualiza) la release con el número de versión de la app (versionName).
+      # Reintenta varias veces por si el servicio de subida de GitHub falla un momento.
+      - name: Publicar release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "v$VERSION" --json isDraft -q .isDraft 2>/dev/null | grep -q true; then
-            gh release delete "v$VERSION" --yes
-          fi
-      # Publica (o actualiza) la release con el número de versión de la app (versionName).
-      - name: Publicar release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ env.VERSION }}
-          name: MorvehTV ${{ env.VERSION }}
-          target_commitish: ${{ github.sha }}
-          make_latest: true
-          files: MorvehTV.apk
+          TAG="v$VERSION"
+          for i in 1 2 3 4 5 6; do
+            # borra un borrador vacío que haya quedado de un intento fallido
+            if gh release view "$TAG" --json isDraft -q .isDraft 2>/dev/null | grep -q true; then
+              gh release delete "$TAG" --yes || true
+            fi
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" MorvehTV.apk --clobber && exit 0
+            else
+              gh release create "$TAG" MorvehTV.apk --title "MorvehTV $VERSION" --target "$GITHUB_SHA" --latest \
+                --notes "APK listo para instalar en Android TV, Google TV y Fire TV." && exit 0
+            fi
+            echo "Intento $i fallido; reintentando en $((i * 20)) s…"
+            sleep $((i * 20))
+          done
+          exit 1
