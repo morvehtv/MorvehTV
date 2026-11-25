@@ -443,6 +443,14 @@
   function play(item, epUrl) {
     addHistory(item, epUrl);
     saveStack();
+    // al volver del reproductor (Atrás) se aterriza en la ficha de este contenido
+    var top = stack[stack.length - 1];
+    if (!(top && top.s === 'detail' && top.url === item.url)) {
+      stack.push({ s: 'detail', url: item.url, item: slim(item) });
+      top = stack[stack.length - 1];
+    }
+    top.f = epUrl || 'd-play';
+    store.sset('tvstack', stack);
     location.href = (epUrl || item.url) + '#tvplay';
   }
 
@@ -1081,11 +1089,69 @@
     return true;
   }
 
+  // ------------------------------------------------------------------ INTRO
+  var intro = null, introAudio = null, introTimers = [];
+  function playIntro() {
+    if (store.sget('introDone')) return;          // solo al abrir la app, no al volver del reproductor
+    store.sset('introDone', 1);
+    intro = document.createElement('div');
+    intro.id = 'intro';
+    var rays = '';
+    for (var r = 0; r < 8; r++) rays += '<i style="-webkit-transform:rotate(' + (r * 22.5) + 'deg);transform:rotate(' + (r * 22.5) + 'deg)"></i>';
+    var word = '', letters = 'MORVEHTV'.split('');
+    letters.forEach(function (ch, i) {
+      var d = (1.3 + i * 0.075).toFixed(3) + 's';
+      word += '<span class="' + (i >= 6 ? 'y' : '') + '" style="-webkit-animation-delay:' + d + ',' + (2.5 + i * 0.05).toFixed(2) + 's;animation-delay:' + d + ',' + (2.5 + i * 0.05).toFixed(2) + 's">' + ch + '</span>';
+    });
+    var sparks = '';
+    function burst(n, delay, scale) {
+      for (var k = 0; k < n; k++) {
+        var ang = Math.round(k * 360 / n + Math.random() * 14);
+        var dl = (delay + Math.random() * 0.12).toFixed(2);
+        sparks += '<div class="i-spark" style="-webkit-transform:rotate(' + ang + 'deg);transform:rotate(' + ang + 'deg)">' +
+          '<b style="-webkit-animation-delay:' + dl + 's;animation-delay:' + dl + 's;width:' + scale + 'rem;height:' + scale + 'rem"></b></div>';
+      }
+    }
+    burst(18, 0.65, 0.7);
+    burst(12, 2.5, 0.45);
+    intro.innerHTML = '<div class="i-glow"></div><div class="i-rays">' + rays + '</div><div class="i-line"></div>' +
+      '<div class="i-flash"></div><div class="i-ring"></div>' + sparks +
+      '<div class="i-logo"><div class="i-icon">' + icon('play') + '</div><div class="i-word">' + word + '</div></div>' +
+      '<div class="i-tag">Películas · Series · Anime</div>';
+    document.body.appendChild(intro);
+    try {
+      introAudio = new Audio('intro.mp3');
+      introAudio.volume = 0.9;
+      var pr = introAudio.play();
+      if (pr && pr['catch']) pr['catch'](function () {});
+    } catch (e) {}
+    introTimers.push(setTimeout(function () { if (intro) intro.className = 'out'; }, 3700));
+    introTimers.push(setTimeout(endIntro, 4500));
+  }
+  function endIntro() {
+    introTimers.forEach(clearTimeout); introTimers = [];
+    if (intro && intro.parentNode) intro.parentNode.removeChild(intro);
+    intro = null;
+  }
+  function skipIntro() {
+    if (!intro) return;
+    introTimers.forEach(clearTimeout); introTimers = [];
+    intro.className = 'skip out';
+    if (introAudio) {
+      var a = introAudio, v = a.volume;
+      var fade = setInterval(function () { v -= 0.15; if (v <= 0) { clearInterval(fade); try { a.pause(); } catch (e) {} } else a.volume = v; }, 40);
+    }
+    setTimeout(endIntro, 320);
+  }
+  function guard(fn) {
+    return function (x) { if (intro) { skipIntro(); return true; } return fn(x); };
+  }
+
   // ------------------------------------------------------------------ API para la app nativa
   window.__tvnav = {
-    move: move,
-    activate: activate,
-    back: back,
+    move: guard(move),
+    activate: guard(activate),
+    back: guard(back),
     media: function () { return null; },
     refresh: function () {},
     openMenu: openRail
@@ -1104,6 +1170,7 @@
 
   buildRail();
   render();
+  playIntro();
   setTimeout(function () { checkNew(true); }, 15000);
   setInterval(function () { checkNew(true); }, CHECK_MS);
 })();

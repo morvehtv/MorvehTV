@@ -4,6 +4,8 @@ App para Android TV, Google TV y Fire TV (también funciona en móviles y tablet
 
 ## La app
 
+- **Intro:** al abrir la app suena y se ve una intro animada de unos 4 segundos, con sonido creado para la app. Se salta con cualquier botón y solo sale al abrir la app, no al volver del reproductor (`assets/tv/intro.mp3` y la sección INTRO de `tv.css`).
+
 La app tiene su propia interfaz, al estilo de una plataforma de streaming. El catálogo se lee directamente de morvehtv.com, así que todo lo que publiques en la web aparece en la app.
 
 - **Inicio:** un destacado grande y filas de Seguir viendo, Novedades, cada categoría y Mi lista. Al moverte por las tarjetas, el destacado muestra la información del título seleccionado.
@@ -31,7 +33,7 @@ La app tiene su propia interfaz, al estilo de una plataforma de streaming. El ca
 | Play/Pausa u OK | Pausar o reanudar |
 | ◀ / ▶ o ⏪ / ⏩ | Retroceder o avanzar 10 s; al mantener, 30 s y luego 60 s |
 | ▲ / ▼ | Mostrar los controles: barra de tiempo, subtítulos, audio y velocidad |
-| Atrás | Ocultar los controles o volver a la ficha |
+| Atrás | Volver a la ficha del contenido |
 
 Si se usa el reproductor de la web porque ExoPlayer no pudo con ese vídeo, Play/Pausa y OK funcionan con un clic en el centro del reproductor. Para avanzar, usa el modo cursor.
 

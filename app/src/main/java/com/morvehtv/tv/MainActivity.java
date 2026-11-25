@@ -395,6 +395,7 @@ public class MainActivity extends Activity {
                 : path.endsWith(".css") ? "text/css"
                 : path.endsWith(".png") ? "image/png"
                 : path.endsWith(".svg") ? "image/svg+xml"
+                : path.endsWith(".mp3") ? "audio/mpeg"
                 : "text/html";
         try {
             InputStream in = getAssets().open("tv/" + path);

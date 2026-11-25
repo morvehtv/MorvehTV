@@ -33,7 +33,7 @@ import java.util.Map;
 /**
  * Reproductor ExoPlayer a pantalla completa, manejado con el mando:
  *  OK / Play-Pausa: pausar o reanudar · ◀ ▶ / ⏪ ⏩: retroceder o avanzar 10 s (más al mantener)
- *  ▲ ▼: mostrar los controles (subtítulos, audio, velocidad) · Atrás: ocultar controles o salir.
+ *  ▲ ▼: mostrar los controles (subtítulos, audio, velocidad) · Atrás: volver a la ficha.
  * Si el vídeo no se puede reproducir aquí, devuelve RESULT_FIRST_USER para usar el reproductor de la web.
  */
 public class PlayerActivity extends Activity {
@@ -251,9 +251,10 @@ public class PlayerActivity extends Activity {
                 break;
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_ESCAPE:
+                // Atrás: sale del reproductor y vuelve a la ficha del contenido
                 if (!down && !e.isCanceled()) {
-                    if (controls) view.hideController();
-                    else { savePosition(); finishOk(); }
+                    savePosition();
+                    finishOk();
                 }
                 return true;
         }
