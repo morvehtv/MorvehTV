@@ -36,7 +36,6 @@
     ['Docuseries', '/docuseries/'],
     ['Películas anime', '/peliculas-anime/'],
     ['Series anime', '/series-anime/'],
-    ['Programas TV', '/programas-tv/'],
     ['Telenovelas', '/telenovelas/'],
     ['Mi cuenta', '/movie-engine-login/'],
     ['Modo cursor', '#cursor'],

@@ -32,7 +32,6 @@
     { id: 'docuseries', name: 'Docuseries', path: '/docuseries/', icon: 'docs' },
     { id: 'peliculas-anime', name: 'Películas anime', path: '/peliculas-anime/', icon: 'anime' },
     { id: 'series-anime', name: 'Series anime', path: '/series-anime/', icon: 'anime' },
-    { id: 'programas-tv', name: 'Programas TV', path: '/programas-tv/', icon: 'show' },
     { id: 'telenovelas', name: 'Telenovelas', path: '/telenovelas/', icon: 'novela' }
   ];
   function catById(id) { for (var i = 0; i < CATS.length; i++) if (CATS[i].id === id) return CATS[i]; return null; }
