@@ -23,6 +23,12 @@ jobs:
           ./gradlew assembleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk MorvehTV.apk
           echo "VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)" >> "$GITHUB_ENV"
+      - name: Verificar APK
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          echo "::notice title=badging::$($BT/aapt2 dump badging MorvehTV.apk | grep -E '^(package|sdkVersion|targetSdkVersion|native-code|uses-feature|application-label)' | tr '\n' ' ')"
+          echo "::notice title=firma::$($BT/apksigner verify -v --min-sdk-version 19 MorvehTV.apk 2>&1 | tr '\n' ' ')"
+          echo "::notice title=zip::$(unzip -l MorvehTV.apk | tail -n +4 | awk '{print $4}' | tr '\n' ' ' | cut -c1-900)"
       - uses: actions/upload-artifact@v4
         with:
           name: MorvehTV-apk
