@@ -4,6 +4,7 @@
  */
 (function () {
   'use strict';
+  if (location.pathname.indexOf('/__tv/') === 0) return;   // la interfaz propia tiene su navegación
   if (window.__tvnav) { window.__tvnav.refresh(); return; }
 
   // Compatibilidad con el navegador de Android 4.4 / 5.
@@ -24,8 +25,10 @@
   }
 
   var ORIGIN = 'https://morvehtv.com';
+  var APP_URL = ORIGIN + '/__tv/index.html';
   var MENU = [
-    ['Inicio', '/'],
+    ['◀ Volver a la app', '#app'],
+    ['Inicio de la web', '/'],
     ['Buscar', '#search'],
     ['Películas', '/peliculas/'],
     ['Series', '/series/'],
@@ -132,6 +135,7 @@
   function scopeRoot() {
     scopeIsGeneric = false;
     if (menuOpen && menuEl) return menuEl;
+    if (playerBox && document.contains(playerBox)) return playerBox;
     var modals = document.querySelectorAll(
       'dialog[open],[aria-modal="true"],.modal.show,.modal.in,.modal.open,.modal.active,.modal.is-open,' +
       '.mfp-wrap,.fancybox-container,.lity,.lightbox.open,[class*="modal"][class*="open"],' +
@@ -406,13 +410,19 @@
 
   function back() {
     if (menuOpen) { closeMenu(); return true; }
+    if (playerMode) {
+      // vuelve a la ficha de la app (la app recuerda dónde estabas)
+      try { var v = document.querySelectorAll('video'); for (var i = 0; i < v.length; i++) v[i].pause(); } catch (e) {}
+      location.replace(APP_URL);
+      return true;
+    }
     var ae = document.activeElement;
     if (isText(ae)) { ae.blur(); return true; }
     if (document.fullscreenElement) { document.exitFullscreen(); return true; }
     var root = scopeRoot();
     if (root !== document.body && root !== document.documentElement) {
       var close = root.querySelector(
-        '[class*="close"],[aria-label*="close" i],[aria-label*="cerrar" i],[data-dismiss],[data-bs-dismiss],[title*="cerrar" i],[title*="close" i]');
+        '[class*="close"],[aria-label*="close"],[aria-label*="Close"],[aria-label*="cerrar"],[aria-label*="Cerrar"],[data-dismiss],[data-bs-dismiss],[title*="cerrar"],[title*="close"]');
       if (!close) {
         var bs = root.querySelectorAll('button,a,span,div');
         for (var i = 0; i < bs.length; i++) {
@@ -551,6 +561,7 @@
       try { input.click(); } catch (e) {}
       return;
     }
+    if (target === '#app') { closeMenu(); location.href = APP_URL; return; }
     if (target === '#cursor') { closeMenu(); Bridge.toggleCursor(); return; }
     if (target === '#reload') { closeMenu(); Bridge.reload(); return; }
     closeMenu();
@@ -601,6 +612,97 @@
     }
   }
 
+  // ------------------------------------------------------------ modo reproductor (#tvplay)
+
+  var playerMode = location.hash === '#tvplay';
+  var playerBox = null;
+
+  function startPlayer() {
+    var st = document.createElement('style');
+    st.textContent = [
+      '#tvplay-wait{position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:#0a0910;',
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;',
+      'font-family:system-ui,Roboto,Arial,sans-serif;visibility:visible !important}',
+      '#tvplay-wait *{visibility:visible !important}',
+      '#tvplay-wait .sp{width:56px;height:56px;border-radius:50%;border:6px solid rgba(255,255,255,.15);',
+      'border-top-color:#FFC107;animation:tvspin .8s linear infinite;-webkit-animation:tvspin .8s linear infinite}',
+      '@keyframes tvspin{to{transform:rotate(360deg)}}@-webkit-keyframes tvspin{to{-webkit-transform:rotate(360deg)}}',
+      '#tvplay-wait p{margin-top:22px;font-size:22px;color:#cfcad8}#tvplay-wait small{margin-top:10px;font-size:16px;color:#8f889c}',
+      'html.tvplay,html.tvplay body{overflow:hidden !important;background:#000 !important}',
+      'html.tvplay body *{visibility:hidden !important}',
+      'html.tvplay .tvplay-box,html.tvplay .tvplay-box *{visibility:visible !important}',
+      'html.tvplay .tvplay-box{position:fixed !important;top:0 !important;left:0 !important;width:100vw !important;height:100vh !important;',
+      'max-width:none !important;max-height:none !important;margin:0 !important;padding:0 !important;z-index:2147483000 !important;',
+      'background:#000 !important;transform:none !important;-webkit-transform:none !important;display:flex !important;flex-direction:column !important}',
+      'html.tvplay .tvplay-box iframe,html.tvplay .tvplay-box video{flex:1 1 auto !important;width:100% !important;height:100% !important;',
+      'max-width:none !important;max-height:none !important;border:0 !important;min-height:0 !important}',
+      'html.tvplay .tvplay-box .tvnav-focus{outline:none !important;box-shadow:none !important}'
+    ].join('');
+    (document.head || document.documentElement).appendChild(st);
+    var wait = document.createElement('div');
+    wait.id = 'tvplay-wait';
+    wait.innerHTML = '<div class="sp"></div><p>Cargando reproductor…</p><small>Atrás: volver a la ficha</small>';
+    (document.body || document.documentElement).appendChild(wait);
+
+    function isTrailer(el) {
+      var id = ((el.className && el.className.baseVal !== undefined ? '' : el.className) + ' ' + (el.id || '') + ' ' +
+        (el.textContent || '') + ' ' + (el.getAttribute('href') || '')).toLowerCase();
+      return /trailer|tráiler/.test(id) || !!(el.closest && el.closest('[class*="trailer"],[id*="trailer"]'));
+    }
+    function clickPlay() {
+      var box = document.getElementById('movie-engine-player');
+      if (box) { try { box.scrollIntoView(); } catch (e) {} }
+      var c = document.querySelectorAll('a[href*="movie-engine-player"], .play-btn, [class*="play-now"], [class*="btn-play"], ' +
+        'button[class*="play"], a[class*="play"], [class*="play-button"], [aria-label*="play"], [aria-label*="Play"], [aria-label*="reproducir"], [aria-label*="Reproducir"]');
+      for (var i = 0; i < c.length; i++) {
+        if (!isTrailer(c[i]) && !(c[i].closest && c[i].closest('#tvplay-wait'))) {
+          try { c[i].click(); } catch (e) {}
+          break;
+        }
+      }
+      // el clic en un enlace "#..." cambia la dirección: lo dejamos como estaba para que Atrás funcione bien
+      try { if (location.hash !== '#tvplay') history.replaceState(null, '', location.pathname + location.search + '#tvplay'); } catch (e) {}
+    }
+    function findMedia() {
+      var list = document.querySelectorAll('video, iframe'), best = null, area = 0;
+      for (var i = 0; i < list.length; i++) {
+        var el = list[i];
+        if (isTrailer(el) || (el.closest && el.closest('#tvplay-wait'))) continue;
+        var r = el.getBoundingClientRect(), a = r.width * r.height;
+        var src = (el.getAttribute('src') || '').toLowerCase();
+        if (r.width < 200 || r.height < 110 || /doubleclick|googlesyndication|adservice|\/ads?\//.test(src)) continue;
+        if (a > area) { area = a; best = el; }
+      }
+      return best;
+    }
+    function enter(media) {
+      var box = document.getElementById('movie-engine-player');
+      if (!box || !box.contains(media)) box = media.parentElement || media;
+      if (box === document.body) box = media;
+      playerBox = box;
+      box.classList.add('tvplay-box');
+      document.documentElement.classList.add('tvplay');
+      if (wait.parentNode) wait.parentNode.removeChild(wait);
+      cur = null;
+      setFocus(media);
+      if (media.tagName === 'VIDEO') { try { media.play(); } catch (e) {} }
+    }
+    clickPlay();
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      var m = findMedia();
+      if (m) { clearInterval(iv); enter(m); return; }
+      if (tries === 6 || tries === 16) clickPlay();
+      if (tries > 50) {
+        clearInterval(iv);
+        if (wait.parentNode) wait.parentNode.removeChild(wait);
+        playerMode = false;   // no se encontró: se deja la página normal para usarla con el mando
+        refresh();
+      }
+    }, 400);
+  }
+
   window.__tvnav = {
     move: move,
     activate: activate,
@@ -611,9 +713,12 @@
   };
 
   addStyle();
+  function boot() {
+    if (playerMode) startPlayer(); else refresh();
+  }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { setTimeout(refresh, 200); });
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(boot, 200); });
   } else {
-    setTimeout(refresh, 200);
+    setTimeout(boot, 200);
   }
 })();

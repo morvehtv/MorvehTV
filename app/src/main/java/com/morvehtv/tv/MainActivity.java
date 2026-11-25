@@ -21,6 +21,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -33,6 +34,8 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * App de Smart TV para morvehtv.com.
@@ -47,7 +50,10 @@ import java.io.InputStream;
 public class MainActivity extends Activity {
 
     /** Página de inicio de la app. */
-    static final String HOME = "https://morvehtv.com/";
+    static final String SITE = "https://morvehtv.com";
+    /** Interfaz propia de la app (assets/tv), servida dentro del dominio de la web. */
+    static final String APP_PREFIX = SITE + "/__tv/";
+    static final String HOME = APP_PREFIX + "index.html";
 
     /**
      * Dominios que se pueden abrir dentro de la app como página principal.
@@ -210,6 +216,19 @@ public class MainActivity extends Activity {
                 return blockNavigation(Uri.parse(url));
             }
 
+            // Sirve la interfaz de la app desde assets/tv como si fuera parte de la web
+            // (así puede leer el catálogo y la sesión del usuario sin problemas).
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+                return serveApp(req.getUrl().toString());
+            }
+
+            @SuppressWarnings("deprecation")
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                return serveApp(url);
+            }
+
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 mainFrameError = false;
@@ -290,6 +309,36 @@ public class MainActivity extends Activity {
                 return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
             }
         });
+    }
+
+    private WebResourceResponse serveApp(String url) {
+        if (url == null || !url.startsWith(APP_PREFIX)) return null;
+        String path = url.substring(APP_PREFIX.length());
+        int cut = path.indexOf('?');
+        if (cut >= 0) path = path.substring(0, cut);
+        cut = path.indexOf('#');
+        if (cut >= 0) path = path.substring(0, cut);
+        if (path.isEmpty()) path = "index.html";
+        if (path.contains("..")) return null;
+        String mime = path.endsWith(".js") ? "application/javascript"
+                : path.endsWith(".css") ? "text/css"
+                : path.endsWith(".png") ? "image/png"
+                : path.endsWith(".svg") ? "image/svg+xml"
+                : "text/html";
+        try {
+            InputStream in = getAssets().open("tv/" + path);
+            WebResourceResponse r = new WebResourceResponse(mime, "UTF-8", in);
+            if (Build.VERSION.SDK_INT >= 21) {
+                Map<String, String> h = new HashMap<>();
+                h.put("Cache-Control", "no-store");
+                h.put("Access-Control-Allow-Origin", SITE);
+                r.setResponseHeaders(h);
+                r.setStatusCodeAndReasonPhrase(200, "OK");
+            }
+            return r;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private boolean blockNavigation(Uri u) {
@@ -495,7 +544,8 @@ public class MainActivity extends Activity {
         }
         web.evaluateJavascript("window.__tvnav ? __tvnav.back() : false", r -> {
             if ("true".equals(r)) return;
-            if (web.canGoBack()) {
+            boolean exit = "\"exit\"".equals(r);   // la interfaz de la app pide salir
+            if (!exit && web.canGoBack()) {
                 web.goBack();
                 return;
             }

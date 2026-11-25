@@ -2,20 +2,35 @@
 
 App para Android TV, Google TV y Fire TV (también funciona en móviles y tablets Android) que carga morvehtv.com con navegación completa por mando a distancia.
 
-## Cómo se usa con el mando
+## La app
+
+La app tiene su propia interfaz, al estilo de una plataforma de streaming. El catálogo se lee directamente de morvehtv.com, así que todo lo que publiques en la web aparece en la app.
+
+- **Inicio:** un destacado grande y filas de Seguir viendo, Novedades, cada categoría y Mi lista. Al moverte por las tarjetas, el destacado muestra la información del título seleccionado.
+- **Ficha:** póster, nota, año, duración, géneros, sinopsis, reparto, episodios (en series) y más títulos.
+- **Reproducir:** abre la película en la web mostrando solo el reproductor, a pantalla completa. Atrás te devuelve a la ficha.
+- **Buscar:** con un teclado en pantalla pensado para el mando.
+- **Mi lista y Seguir viendo:** se guardan en la propia tele.
+- **Web clásica:** en el menú lateral, para usar la web tal cual.
+
+## Mando
 
 | Botón | Qué hace |
 |---|---|
-| Flechas | Mueven el foco (recuadro amarillo) entre películas, botones y menús |
-| OK | Abre o pulsa lo que está enfocado |
-| ◀ en el borde izquierdo | Abre el menú lateral: Inicio, Buscar, Películas, Series, Documentales, Anime, Telenovelas… |
-| Mantener OK (o botón Menú / Rojo) | Activa o desactiva el **modo cursor** (una flecha que se mueve con las flechas), para los controles del reproductor |
-| Atrás | Cierra menús y ventanas (tráiler), sale de pantalla completa o vuelve a la página anterior. Si lo pulsas dos veces en la página de inicio, sale de la app |
-| Play/Pausa | Reproduce o pausa el vídeo |
-| ⏩ / ⏪ | Avanza o retrocede 10 s (en reproductores incrustados de otro servidor, usa el modo cursor) |
-| Canal + / Canal − | Sube o baja la página |
+| Flechas | Moverse por la interfaz |
+| OK | Abrir o pulsar |
+| ◀ en el borde izquierdo | Menú lateral (categorías, buscar, mi lista…) |
+| Atrás | Volver. En el inicio: sube al destacado, abre el menú y, a la segunda, sale |
+| Mantener OK | Modo cursor, para los controles del reproductor (idioma, servidor, avance) |
+| Play/Pausa | Pausar o reanudar el vídeo |
 
-La app también bloquea las ventanas emergentes y las redirecciones a otros dominios (anuncios), arregla la pantalla completa de los reproductores y evita que la tele se apague mientras ves algo en pantalla completa.
+## Archivos principales
+
+- `app/src/main/assets/tv/`: la interfaz de la app (`index.html`, `tv.css`, `tv.js`).
+- `app/src/main/assets/tvnav.js`: navegación con el mando dentro de la web y el modo reproductor.
+- `app/src/main/java/com/morvehtv/tv/MainActivity.java`: la app Android.
+
+Cada vez que se sube un cambio a GitHub, se compila sola y se publica una release con el APK (`v` + `versionName`).
 
 ## Generar el APK
 
