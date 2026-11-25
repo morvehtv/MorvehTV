@@ -45,4 +45,4 @@ La app aparecerá en la fila de apps de la tele con su banner.
 - **Icono y banner:** `app/src/main/res/mipmap-*/ic_launcher.png` y `drawable-xhdpi/banner.png` (320×180 dp; el archivo mide 640×360 px).
 
 ## Publicar en Google Play
-El APK está firmado con la clave de depuración para poder instalarlo directamente. Para Google Play necesitas tu propia clave de firma (Android Studio: *Build → Generate Signed Bundle*). Además, sube `targetSdk` al nivel que pida Play en ese momento. Ten en cuenta que, si el APK se compila con GitHub Actions, la clave de depuración cambia en cada compilación. Para actualizar la app tendrás que desinstalar antes la versión anterior.
+El APK se firma con la clave `morvehtv.jks` (contraseña `morvehtv2026`). Guarda una copia: sin ella no podrás publicar actualizaciones de la app. Además, sube `targetSdk` al nivel que pida Play en ese momento.

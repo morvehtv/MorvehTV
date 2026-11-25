@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.net.http.SslError;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -15,9 +17,9 @@ import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
-import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -172,7 +174,9 @@ public class MainActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setSupportMultipleWindows(false);           // sin ventanas emergentes
         s.setJavaScriptCanOpenWindowsAutomatically(false);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        if (Build.VERSION.SDK_INT >= 21) {
+            s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        }
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
 
         // Agente de usuario de Chrome normal (sin la marca "wv" de WebView) para que
@@ -182,7 +186,9 @@ public class MainActivity extends Activity {
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
-        cm.setAcceptThirdPartyCookies(web, true);   // sesión y reproductores incrustados
+        if (Build.VERSION.SDK_INT >= 21) {
+            cm.setAcceptThirdPartyCookies(web, true);   // sesión y reproductores incrustados
+        }
 
         web.setBackgroundColor(0xFF000000);
         web.setFocusable(true);
@@ -190,15 +196,18 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "TVBridge");
 
         web.setWebViewClient(new WebViewClient() {
+            // Android 7 o superior
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
-                if (!req.isForMainFrame()) return false;
-                Uri u = req.getUrl();
-                String scheme = u.getScheme() == null ? "" : u.getScheme();
-                if (!scheme.startsWith("http")) return true;   // intent://, market://, etc.
-                if (isAllowedHost(u.getHost())) return false;
-                showToast(getString(R.string.external_blocked), 2000);
-                return true;
+                if (Build.VERSION.SDK_INT >= 21 && !req.isForMainFrame()) return false;
+                return blockNavigation(req.getUrl());
+            }
+
+            // Android 4.4 a 6
+            @SuppressWarnings("deprecation")
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return blockNavigation(Uri.parse(url));
             }
 
             @Override
@@ -219,6 +228,7 @@ public class MainActivity extends Activity {
                 if (!mainFrameError) errorView.setVisibility(View.GONE);
             }
 
+            // Android 6 o superior
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
                 if (req.isForMainFrame()) {
@@ -227,8 +237,30 @@ public class MainActivity extends Activity {
                 }
             }
 
+            // Android 4.4 y 5 (solo informa de errores de la página principal)
+            @SuppressWarnings("deprecation")
             @Override
-            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            public void onReceivedError(WebView view, int code, String desc, String failingUrl) {
+                if (Build.VERSION.SDK_INT < 23) {
+                    mainFrameError = true;
+                    showError();
+                }
+            }
+
+            // Los Android anteriores a 7.1 no reconocen los certificados raíz modernos
+            // (p. ej. Let's Encrypt). Solo en esos aparatos aceptamos ese caso concreto;
+            // cualquier otro error de certificado se rechaza.
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                if (Build.VERSION.SDK_INT < 25 && error.getPrimaryError() == SslError.SSL_UNTRUSTED) {
+                    handler.proceed();
+                } else {
+                    handler.cancel();
+                }
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
                 // Si la tele se queda sin memoria, reiniciamos la pantalla en vez de cerrar la app.
                 recreate();
                 return true;
@@ -258,6 +290,14 @@ public class MainActivity extends Activity {
                 return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
             }
         });
+    }
+
+    private boolean blockNavigation(Uri u) {
+        String scheme = u.getScheme() == null ? "" : u.getScheme();
+        if (!scheme.startsWith("http")) return true;   // intent://, market://, etc.
+        if (isAllowedHost(u.getHost())) return false;
+        showToast(getString(R.string.external_blocked), 2000);
+        return true;
     }
 
     private boolean isAllowedHost(String host) {

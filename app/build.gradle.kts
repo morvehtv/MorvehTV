@@ -8,10 +8,10 @@ android {
 
     defaultConfig {
         applicationId = "com.morvehtv.tv"
-        minSdk = 21
+        minSdk = 19
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
 
     signingConfigs {
@@ -29,7 +29,11 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("morvehtv")
+            // Si falta el archivo de firma, compila igualmente con la clave de prueba.
+            signingConfig = if (rootProject.file("morvehtv.jks").exists())
+                signingConfigs.getByName("morvehtv")
+            else
+                signingConfigs.getByName("debug")
         }
     }
 

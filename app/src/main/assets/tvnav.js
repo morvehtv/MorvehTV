@@ -6,6 +6,23 @@
   'use strict';
   if (window.__tvnav) { window.__tvnav.refresh(); return; }
 
+  // Compatibilidad con el navegador de Android 4.4 / 5.
+  var EP = window.Element && Element.prototype;
+  if (EP && !EP.matches) {
+    EP.matches = EP.webkitMatchesSelector || EP.msMatchesSelector || function (sel) {
+      var m = (this.ownerDocument || document).querySelectorAll(sel), i = m.length;
+      while (--i >= 0 && m[i] !== this) {}
+      return i > -1;
+    };
+  }
+  if (EP && !EP.closest) {
+    EP.closest = function (sel) {
+      var el = this;
+      while (el && el.nodeType === 1) { if (el.matches(sel)) return el; el = el.parentElement; }
+      return null;
+    };
+  }
+
   var ORIGIN = 'https://morvehtv.com';
   var MENU = [
     ['Inicio', '/'],
@@ -406,7 +423,7 @@
       if (close) { close.click(); }
       else if (scopeIsGeneric) { return false; }
       else {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+        try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })); } catch (e) {}
         root.style.display = 'none';
       }
       // Detiene vídeos que sigan sonando dentro de la ventana (p. ej. tráiler).
@@ -554,7 +571,7 @@
 
   // Si el usuario toca/hace clic con el cursor, el foco del mando sigue a ese elemento.
   document.addEventListener('click', function (e) {
-    if (!e.isTrusted || !e.target || !e.target.closest) return;
+    if (e.isTrusted === false || !e.target || !e.target.closest) return;
     var el = e.target.closest(SEL);
     if (el && el !== cur && !el.closest('#tvnav-menu') && visible(el)) {
       if (cur) cur.classList.remove('tvnav-focus', 'tvnav-card');
