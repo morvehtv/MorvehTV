@@ -307,13 +307,15 @@
   }
 
   // ------------------------------------------------------------------ caché de datos
-  var DETAIL_TTL = 24 * 3600 * 1000, LIST_TTL = 10 * 60 * 1000;
+  var DETAIL_TTL = 24 * 3600 * 1000, LIST_TTL = 3 * 60 * 1000;
   var details = {};
 
-  function getDetail(url, cb) {
-    if (details[url]) return cb(null, details[url]);
-    var c = store.get('d:' + url);
-    if (c && Date.now() - c.t < DETAIL_TTL) { details[url] = c.d; return cb(null, c.d); }
+  function getDetail(url, cb, force) {
+    if (!force) {
+      if (details[url]) return cb(null, details[url]);
+      var c = store.get('d:' + url);
+      if (c && Date.now() - c.t < DETAIL_TTL) { details[url] = c.d; return cb(null, c.d); }
+    }
     fetchDoc(url, function (err, doc) {
       if (err) return cb(err);
       var d = parseDetail(doc, url);
@@ -323,10 +325,10 @@
     });
   }
 
-  function getList(path, page, cb) {
+  function getList(path, page, cb, force) {
     var key = 'l:' + path + ':' + page;
     var c = store.sget(key);
-    if (c && Date.now() - c.t < LIST_TTL) return cb(null, c.items, c.more);
+    if (!force && c && Date.now() - c.t < LIST_TTL) return cb(null, c.items, c.more);
     var url = ORIGIN + path + (page > 1 ? 'page/' + page + '/' : '');
     fetchDoc(url, function (err, doc) {
       if (err) return cb(err, []);
@@ -388,6 +390,53 @@
     var s = slim(it); s.ep = epUrl || null; s.t = Date.now();
     h.unshift(s);
     store.set('history', h.slice(0, 30));
+  }
+
+  // ------------------------------------------------------------------ contenido nuevo
+  var NEW_DAYS = 3, CHECK_MS = 5 * 60 * 1000;
+  function newMap() {
+    var m = store.get('newItems', {}), now = Date.now(), out = {};
+    for (var u in m) if (now - m[u] < NEW_DAYS * 864e5) out[u] = m[u];
+    return out;
+  }
+  function isNew(url) { return !!newMap()[url]; }
+  function markSeen(url) { var m = newMap(); if (m[url]) { delete m[url]; store.set('newItems', m); } }
+
+  var lastCheck = 0, checking = false;
+  // Revisa la web y, si hay títulos que la app no había visto, actualiza las filas y avisa.
+  function checkNew(forceNow) {
+    if (checking || (!forceNow && Date.now() - lastCheck < 60000)) return;
+    checking = true; lastCheck = Date.now();
+    var paths = ['/'].concat(CATS.map(function (c) { return c.path; }));
+    var seen = store.get('seen', null), firstRun = !seen;
+    seen = seen || {};
+    var fresh = [], freshSet = {}, lists = {}, left = paths.length;
+    paths.forEach(function (path) {
+      getList(path, 1, function (err, items) {
+        if (!err && items) {
+          lists[path] = items;
+          items.forEach(function (it) {
+            if (!seen[it.url]) {
+              seen[it.url] = Date.now();
+              if (!firstRun && !freshSet[it.url]) { freshSet[it.url] = 1; fresh.push(it); }
+            }
+          });
+        }
+        if (--left) return;
+        checking = false;
+        // guarda lo visto (máx. 5000 direcciones)
+        var keys = Object.keys(seen);
+        if (keys.length > 5000) keys.sort(function (a, b) { return seen[a] - seen[b]; }).slice(0, keys.length - 5000).forEach(function (k) { delete seen[k]; });
+        store.set('seen', seen);
+        if (fresh.length) {
+          var m = newMap();
+          fresh.forEach(function (it) { m[it.url] = Date.now(); });
+          store.set('newItems', m);
+          toast(fresh.length === 1 ? 'Nuevo en MorvehTV: ' + fresh[0].title : fresh.length + ' títulos nuevos en MorvehTV');
+        }
+        if (screen && screen.update) screen.update(lists);
+      }, true);
+    });
   }
 
   // ------------------------------------------------------------------ reproducción
@@ -617,6 +666,7 @@
     c.setAttribute('data-key', it.url);
     c.innerHTML = '<div class="poster"><img alt=""><div class="ph">' + esc(it.title) + '</div>' +
       (it.rating ? '<span class="badge">★ ' + esc(it.rating) + '</span>' : '') +
+      (isNew(it.url) ? '<span class="new">NUEVO</span>' : '') +
       (opts.bar ? '<div class="bar" style="width:' + opts.bar + '%"></div>' : '') +
       '</div><div class="cap">' + esc(it.title) + '</div>';
     var img = c.querySelector('img');
@@ -734,16 +784,21 @@
       var sec = skelRow(def.title);
       rows.appendChild(sec);
       function put(items) {
-        if (!items.length) { sec.parentNode && sec.parentNode.removeChild(sec); return; }
+        var sig = items.map(function (x) { return x.url + (isNew(x.url) ? '*' : ''); }).join('|');
+        if (sig === def.sig) return;          // sin cambios: no se repinta
+        def.sig = sig;
+        if (!items.length) { sec.style.display = 'none'; return; }
+        sec.style.display = '';
         anyItems = true;
         var o = { focus: cardOpts.focus, bar: def.opts && def.opts.bar, all: def.cat ? function () { navTo({ s: 'cat', id: def.cat.id }); } : null };
         if (def.title === 'Seguir viendo') o.ok = function (it) { playItem(it, it.ep); };
-        var hadFocus = cur && sec.contains(cur);
+        var hadKey = cur && sec.contains(cur) ? focusKey(cur) : null;
         fillRow(sec, def.title, items.slice(0, 20), o);
-        if (hadFocus) setFocus($('.card', sec), true);
+        if (hadKey) setFocus($('[data-key="' + hadKey.replace(/"/g, '') + '"]', sec) || $('.card', sec), true);
         if (!featured && def.path === '/') { featured = items[0]; if (!current || cur === bPlay) show(featured, 'Destacado'); }
         maybeRestore(sec);
       }
+      def.put = put;
       if (def.items) { put(def.items); return; }
       total++;
       getList(def.path, 1, function (err, items) {
@@ -762,7 +817,13 @@
     });
     if (hist.length) show(hist[0], 'Seguir viendo');
 
-    return { first: function () { return bPlay; } };
+    return {
+      first: function () { return bPlay; },
+      // llega contenido nuevo: se actualizan las filas afectadas sin perder la posición
+      update: function (lists) {
+        defs.forEach(function (def) { if (def.path && lists[def.path] && def.put) def.put(lists[def.path]); });
+      }
+    };
   }
 
   function playItem(it, epUrl) {
@@ -835,6 +896,7 @@
   // ------------------------------------------------------------------ FICHA
   function screenDetail(el, route) {
     var it = route.item || { url: route.url, title: slugTitle(route.url), kind: kindOf(route.url) };
+    markSeen(it.url);
     el.className = 'screen detail';
     el.innerHTML = '<div class="scroller"><div class="hero sec nosnap"><div class="bb-bg"></div><div class="bb-shade"></div><div class="bb-info">' +
       '<div class="kicker"></div><div class="bb-title"></div><div class="meta"></div><div class="genres"></div><div class="desc"></div><div class="credits"></div><div class="btns"></div>' +
@@ -937,6 +999,18 @@
       if (hadFocus) setFocus($('[data-key="' + key + '"]', btns) || playBtn, true);
       sections(d);
       maybeRestore(sc);
+      // comprueba en segundo plano si la ficha ha cambiado (p. ej. episodios nuevos)
+      var before = JSON.stringify([d.episodes && d.episodes.length, d.desc, d.poster]);
+      var cached = store.get('d:' + it.url);
+      if (cached && Date.now() - cached.t < 60000) return;   // recién descargada: no hace falta
+      getDetail(it.url, function (e2, fresh) {
+        if (!fresh || stack[stack.length - 1] !== route) return;
+        if (JSON.stringify([fresh.episodes && fresh.episodes.length, fresh.desc, fresh.poster]) === before) return;
+        var more = (fresh.episodes || []).length - (d.episodes || []).length;
+        saveStack();
+        render();
+        if (more > 0) toast(more === 1 ? 'Hay 1 episodio nuevo' : 'Hay ' + more + ' episodios nuevos');
+      }, true);
     });
     return { first: function () { return playBtn; } };
   }
@@ -1016,6 +1090,8 @@
     refresh: function () {},
     openMenu: openRail
   };
+  // la app nativa avisa al volver a primer plano
+  window.__tvApp = { check: function (force) { checkNew(!!force); } };
 
   // teclado de ordenador (para pruebas en el navegador)
   document.addEventListener('keydown', function (e) {
@@ -1028,4 +1104,6 @@
 
   buildRail();
   render();
+  setTimeout(function () { checkNew(true); }, 15000);
+  setInterval(function () { checkNew(true); }, CHECK_MS);
 })();

@@ -11,6 +11,7 @@ La app tiene su propia interfaz, al estilo de una plataforma de streaming. El ca
 - **Reproducir (ExoPlayer):** la app abre la película en segundo plano, detecta la dirección real del vídeo (MP4, HLS/m3u8, DASH o el stream de movie-engine) y la reproduce con ExoPlayer a pantalla completa. Recuerda por dónde ibas y continúa desde ahí. Si un vídeo no se puede abrir en ExoPlayer, se usa automáticamente el reproductor de la web.
 - **Buscar:** con un teclado en pantalla pensado para el mando.
 - **Mi lista y Seguir viendo:** se guardan en la propia tele.
+- **Contenido nuevo automático:** la app revisa la web cada 5 minutos y al volver a ella. Si publicas algo nuevo, aparece solo en las filas con la etiqueta NUEVO (durante 3 días o hasta abrirlo) y sale un aviso. En las series, al abrir la ficha se comprueba si hay episodios nuevos.
 - **Web clásica:** en el menú lateral, para usar la web tal cual.
 
 ## Mando

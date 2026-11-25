@@ -138,6 +138,8 @@ public class MainActivity extends Activity {
         web.onResume();
         web.resumeTimers();
         hideSystemUi();
+        // al volver a la app, comprueba si hay contenido nuevo en la web
+        js("window.__tvApp && __tvApp.check()");
     }
 
     @Override
