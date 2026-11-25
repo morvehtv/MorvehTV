@@ -8,7 +8,7 @@ La app tiene su propia interfaz, al estilo de una plataforma de streaming. El ca
 
 - **Inicio:** un destacado grande y filas de Seguir viendo, Novedades, cada categoría y Mi lista. Al moverte por las tarjetas, el destacado muestra la información del título seleccionado.
 - **Ficha:** póster, nota, año, duración, géneros, sinopsis, reparto, episodios (en series) y más títulos.
-- **Reproducir:** abre la película en la web mostrando solo el reproductor, a pantalla completa. Atrás te devuelve a la ficha.
+- **Reproducir (ExoPlayer):** la app abre la película en segundo plano, detecta la dirección real del vídeo (MP4, HLS/m3u8, DASH o el stream de movie-engine) y la reproduce con ExoPlayer a pantalla completa. Recuerda por dónde ibas y continúa desde ahí. Si un vídeo no se puede abrir en ExoPlayer, se usa automáticamente el reproductor de la web.
 - **Buscar:** con un teclado en pantalla pensado para el mando.
 - **Mi lista y Seguir viendo:** se guardan en la propia tele.
 - **Web clásica:** en el menú lateral, para usar la web tal cual.
@@ -23,23 +23,23 @@ La app tiene su propia interfaz, al estilo de una plataforma de streaming. El ca
 | Atrás | Volver. En el inicio: sube al destacado, abre el menú y, a la segunda, sale |
 | Mantener OK | Modo cursor, para los controles del reproductor (idioma, servidor…) |
 
-**En el reproductor**, que se abre solo a pantalla completa:
+**En el reproductor** (ExoPlayer, a pantalla completa):
 
 | Botón | Qué hace |
 |---|---|
 | Play/Pausa u OK | Pausar o reanudar |
-| ◀ / ▶ | Retroceder o avanzar 10 s |
-| ⏪ / ⏩ | Retroceder o avanzar 10 s |
-| ▲ / ▼ | Modo cursor, para los controles del reproductor |
-| Atrás | Volver a la ficha |
+| ◀ / ▶ o ⏪ / ⏩ | Retroceder o avanzar 10 s; al mantener, 30 s y luego 60 s |
+| ▲ / ▼ | Mostrar los controles: barra de tiempo, subtítulos, audio y velocidad |
+| Atrás | Ocultar los controles o volver a la ficha |
 
-Si el vídeo viene de un servidor externo, Play/Pausa y OK funcionan con un clic en el centro del reproductor. Para avanzar, usa el modo cursor.
+Si se usa el reproductor de la web porque ExoPlayer no pudo con ese vídeo, Play/Pausa y OK funcionan con un clic en el centro del reproductor. Para avanzar, usa el modo cursor.
 
 ## Archivos principales
 
 - `app/src/main/assets/tv/`: la interfaz de la app (`index.html`, `tv.css`, `tv.js`).
 - `app/src/main/assets/tvnav.js`: navegación con el mando dentro de la web y el modo reproductor.
-- `app/src/main/java/com/morvehtv/tv/MainActivity.java`: la app Android.
+- `app/src/main/java/com/morvehtv/tv/MainActivity.java`: la app Android y la detección del vídeo.
+- `app/src/main/java/com/morvehtv/tv/PlayerActivity.java`: el reproductor ExoPlayer.
 
 Cada vez que se sube un cambio a GitHub, se compila sola y se publica una release con el APK (`v` + `versionName`).
 

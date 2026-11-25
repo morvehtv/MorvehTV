@@ -2,6 +2,7 @@ package com.morvehtv.tv;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -84,6 +85,14 @@ public class MainActivity extends Activity {
     private boolean centerLongHandled = false;
     private long lastBackPress = 0;
     private boolean mainFrameError = false;
+
+    // ---- ExoPlayer: detección del vídeo real que pide la página del reproductor
+    private static final int REQ_PLAYER = 41;
+    private volatile boolean capturing = false;
+    private volatile String captureTitle = null, capturePage = null, captureSub = null;
+    private volatile boolean launching = false;
+    private String userAgent = null;
+    private String lastPlayerPage = null;
 
     // ------------------------------------------------------------------ ciclo de vida
 
@@ -189,6 +198,7 @@ public class MainActivity extends Activity {
         // la web y los reproductores se comporten como en un navegador.
         String ua = s.getUserAgentString().replace("; wv", "").replace("Version/4.0 ", "");
         s.setUserAgentString(ua);
+        userAgent = ua;
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
@@ -220,18 +230,25 @@ public class MainActivity extends Activity {
             // (así puede leer el catálogo y la sesión del usuario sin problemas).
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
-                return serveApp(req.getUrl().toString());
+                String u = req.getUrl().toString();
+                if (capturing) {
+                    Map<String, String> h = req.getRequestHeaders();
+                    checkMedia(u, h == null ? null : h.get("Referer"));
+                }
+                return serveApp(u);
             }
 
             @SuppressWarnings("deprecation")
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                if (capturing) checkMedia(url, null);
                 return serveApp(url);
             }
 
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 mainFrameError = false;
+                capturing = false;   // cada página del reproductor vuelve a pedirlo al cargar
                 progress.setVisibility(View.VISIBLE);
             }
 
@@ -309,6 +326,58 @@ public class MainActivity extends Activity {
                 return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
             }
         });
+    }
+
+    // ------------------------------------------------------------------ ExoPlayer
+
+    private static final java.util.regex.Pattern MEDIA = java.util.regex.Pattern.compile(
+            "(\\.(m3u8|mpd|mp4|m4v|mkv|webm|mov)(\\?|#|$))|/movie-engine/v1/stream/", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern SUB = java.util.regex.Pattern.compile(
+            "(\\.(vtt|srt)(\\?|#|$))|/movie-engine/v1/subtitle/", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern NOT_MEDIA = java.util.regex.Pattern.compile(
+            "youtube|youtu\\.be|googlevideo|doubleclick|googlesyndication|imasdk|adservice|/ads?/|trailer|preroll|vast",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** Se llama (en segundo plano) por cada petición mientras se busca el vídeo de la película. */
+    private void checkMedia(String url, String referer) {
+        if (url == null || !url.startsWith("http")) return;
+        if (SUB.matcher(url).find()) { captureSub = url; return; }
+        if (!MEDIA.matcher(url).find() || NOT_MEDIA.matcher(url).find()) return;
+        capturing = false;
+        final String ref = referer != null ? referer : capturePage;
+        // espera un instante por si llegan los subtítulos justo después
+        handler.postDelayed(() -> launchPlayer(url, ref, captureTitle), 600);
+    }
+
+    private void launchPlayer(String url, String referer, String title) {
+        if (launching) return;
+        launching = true;
+        capturing = false;
+        lastPlayerPage = capturePage;
+        // para el vídeo de la página y vuelve a la ficha de la app mientras se reproduce
+        js("Array.prototype.forEach.call(document.querySelectorAll('video'),function(v){try{v.pause();v.removeAttribute('src');v.load()}catch(e){}})");
+        if (customView != null) exitFullscreen();
+        setCursorMode(false);
+        Intent i = new Intent(this, PlayerActivity.class);
+        i.putExtra(PlayerActivity.EXTRA_URL, url);
+        i.putExtra(PlayerActivity.EXTRA_REFERER, referer);
+        i.putExtra(PlayerActivity.EXTRA_TITLE, title);
+        i.putExtra(PlayerActivity.EXTRA_SUBTITLE, captureSub);
+        i.putExtra(PlayerActivity.EXTRA_USER_AGENT, userAgent);
+        i.putExtra(PlayerActivity.EXTRA_KEY, capturePage != null ? capturePage.replaceAll("#.*$", "") : url);
+        startActivityForResult(i, REQ_PLAYER);
+        web.loadUrl(HOME);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_PLAYER) return;
+        launching = false;
+        if (resultCode == RESULT_FIRST_USER && lastPlayerPage != null) {
+            // ExoPlayer no pudo con este vídeo: se usa el reproductor de la web
+            web.loadUrl(lastPlayerPage.replaceAll("#.*$", "") + "#tvweb");
+        }
     }
 
     private WebResourceResponse serveApp(String url) {
@@ -743,6 +812,27 @@ public class MainActivity extends Activity {
                 if (playing) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else if (customView == null) getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             });
+        }
+
+        /** La página del reproductor empieza: busca el vídeo real para abrirlo en ExoPlayer. */
+        @JavascriptInterface
+        public void startCapture(String title, String pageUrl) {
+            captureTitle = title;
+            capturePage = pageUrl;
+            captureSub = null;
+            launching = false;
+            capturing = true;
+            // si en 25 s no aparece un vídeo reconocible, se queda el reproductor de la web
+            handler.postDelayed(() -> capturing = false, 25000);
+        }
+
+        /** La página ya conoce la dirección del vídeo (reproductor propio de la web). */
+        @JavascriptInterface
+        public void playUrl(String url, String title, String pageUrl) {
+            if (!capturing || url == null || !url.startsWith("http")) return;
+            capturing = false;
+            if (pageUrl != null) capturePage = pageUrl;
+            handler.post(() -> launchPlayer(url, pageUrl, title));
         }
 
         /** Clic real (cuenta como gesto del usuario) en coordenadas de pantalla de la web. */

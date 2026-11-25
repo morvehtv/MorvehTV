@@ -654,7 +654,10 @@
 
   // ------------------------------------------------------------ modo reproductor (#tvplay)
 
-  var playerMode = location.hash === '#tvplay';
+  var playerHash = location.hash;
+  var playerMode = playerHash === '#tvplay' || playerHash === '#tvweb';
+  // #tvplay: se intenta abrir en ExoPlayer · #tvweb: reproductor de la web (ExoPlayer no pudo)
+  var exoCapture = playerHash === '#tvplay' && !!(window.TVBridge && window.TVBridge.startCapture);
   var playerBox = null, playerMedia = null;
 
   // Pantalla completa: el navegador solo la permite tras un gesto del usuario, así que se pide a la app
@@ -688,14 +691,24 @@
 
   function autoStart(media) {
     var v = mainVideo();
+    var delay = exoCapture ? 6000 : 0;   // con ExoPlayer, la pantalla completa web solo si no se abre
+    if (v && exoCapture) {
+      var src = v.currentSrc || v.src || '';
+      if (!src) { var so = v.querySelector('source[src]'); if (so) src = so.src; }
+      if (/^https?:/.test(src) && Bridge.playUrl) {
+        var t = document.querySelector('meta[property="og:title"]');
+        Bridge.playUrl(src, (t && t.getAttribute('content')) || document.title, location.href);
+        return;
+      }
+    }
     if (v) {
       // vídeo accesible: se reproduce directamente
       if (v.paused) { try { var pr = v.play(); if (pr && pr['catch']) pr['catch'](function () {}); } catch (e) {} }
-      setTimeout(function () { goFullscreen(v.ownerDocument === document ? v : media); }, 300);
+      setTimeout(function () { goFullscreen(v.ownerDocument === document ? v : media); }, 300 + delay);
     } else {
       // reproductor de otro servidor: un clic en el centro lo pone en marcha
       if (Bridge.click) { var t = tapOf(media); Bridge.click(t.x, t.y); }
-      setTimeout(function () { goFullscreen(media); }, 1200);
+      setTimeout(function () { goFullscreen(media); }, 1200 + delay);
     }
   }
 
@@ -724,7 +737,8 @@
     (document.head || document.documentElement).appendChild(st);
     var wait = document.createElement('div');
     wait.id = 'tvplay-wait';
-    wait.innerHTML = '<div class="sp"></div><p>Cargando reproductor…</p><small>Atrás: volver a la ficha</small>';
+    wait.style.pointerEvents = 'none';   // deja pasar el clic de arranque al reproductor que hay debajo
+    wait.innerHTML = '<div class="sp"></div><p>Abriendo reproductor…</p><small>Atrás: volver a la ficha</small>';
     (document.body || document.documentElement).appendChild(wait);
 
     function isTrailer(el) {
@@ -744,7 +758,7 @@
         }
       }
       // el clic en un enlace "#..." cambia la dirección: lo dejamos como estaba para que Atrás funcione bien
-      try { if (location.hash !== '#tvplay') history.replaceState(null, '', location.pathname + location.search + '#tvplay'); } catch (e) {}
+      try { if (location.hash !== playerHash) history.replaceState(null, '', location.pathname + location.search + playerHash); } catch (e) {}
     }
     function findMedia() {
       var list = document.querySelectorAll('video, iframe'), best = null, area = 0;
@@ -766,10 +780,17 @@
       playerMedia = media;
       box.classList.add('tvplay-box');
       document.documentElement.classList.add('tvplay');
-      if (wait.parentNode) wait.parentNode.removeChild(wait);
+      // con ExoPlayer, la pantalla de carga sigue hasta que se abre (o hasta que se usa la web)
+      if (!exoCapture && wait.parentNode) wait.parentNode.removeChild(wait);
+      else setTimeout(function () { if (wait.parentNode) wait.parentNode.removeChild(wait); }, 6000);
       cur = null;
       setFocus(media);
       setTimeout(function () { autoStart(media); }, 900);
+    }
+    if (exoCapture) {
+      var t = document.querySelector('meta[property="og:title"]');
+      var title = (t && t.getAttribute('content')) || (document.querySelector('h1') || {}).textContent || document.title;
+      try { Bridge.startCapture(String(title).replace(/\s+/g, ' ').trim(), location.href); } catch (e) { exoCapture = false; }
     }
     clickPlay();
     var tries = 0;

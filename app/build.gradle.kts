@@ -10,8 +10,9 @@ android {
         applicationId = "com.morvehtv.app"
         minSdk = 19
         targetSdk = 34
-        versionCode = 7
-        versionName = "2.2"
+        versionCode = 8
+        versionName = "3.0"
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -46,4 +47,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+}
+
+dependencies {
+    // ExoPlayer (Media3). La 1.4.x es la última que funciona desde Android 4.4.
+    val media3 = "1.4.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
+    implementation("androidx.media3:media3-exoplayer-dash:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
+    implementation("androidx.multidex:multidex:2.0.1")
 }
