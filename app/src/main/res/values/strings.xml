@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MorvehTV</string>
+    <string name="error_title">Sin conexión</string>
+    <string name="error_msg">No se ha podido cargar MorvehTV. Comprueba la conexión a internet.</string>
+    <string name="retry">Reintentar</string>
+    <string name="hint">◀ en el borde izquierdo: menú  ·  Mantén OK: modo cursor</string>
+    <string name="press_back_again">Pulsa Atrás otra vez para salir</string>
+    <string name="cursor_on">Modo cursor activado · OK para pulsar · Atrás para salir</string>
+    <string name="cursor_off">Modo cursor desactivado</string>
+    <string name="external_blocked">Enlace externo bloqueado</string>
+    <string name="seek_hint">Para avanzar o retroceder usa el modo cursor (mantén OK)</string>
+</resources>
