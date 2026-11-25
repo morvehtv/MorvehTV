@@ -21,8 +21,19 @@ La app tiene su propia interfaz, al estilo de una plataforma de streaming. El ca
 | OK | Abrir o pulsar |
 | ◀ en el borde izquierdo | Menú lateral (categorías, buscar, mi lista…) |
 | Atrás | Volver. En el inicio: sube al destacado, abre el menú y, a la segunda, sale |
-| Mantener OK | Modo cursor, para los controles del reproductor (idioma, servidor, avance) |
-| Play/Pausa | Pausar o reanudar el vídeo |
+| Mantener OK | Modo cursor, para los controles del reproductor (idioma, servidor…) |
+
+**En el reproductor**, que se abre solo a pantalla completa:
+
+| Botón | Qué hace |
+|---|---|
+| Play/Pausa u OK | Pausar o reanudar |
+| ◀ / ▶ | Retroceder o avanzar 10 s |
+| ⏪ / ⏩ | Retroceder o avanzar 10 s |
+| ▲ / ▼ | Modo cursor, para los controles del reproductor |
+| Atrás | Volver a la ficha |
+
+Si el vídeo viene de un servidor externo, Play/Pausa y OK funcionan con un clic en el centro del reproductor. Para avanzar, usa el modo cursor.
 
 ## Archivos principales
 

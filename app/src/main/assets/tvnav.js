@@ -47,6 +47,7 @@
     setEditing: function () {}, toggleCursor: function () {}, setPlaying: function () {},
     reload: function () { location.reload(); }, exitApp: function () {}
   };
+  if (!Bridge.osd) Bridge.osd = function () {};
 
   var SEL = [
     'a[href]', 'button', 'input:not([type=hidden])', 'select', 'textarea', 'summary',
@@ -326,6 +327,12 @@
   function move(dir) {
     addStyle();
     if (menuOpen) { menuMove(dir); return true; }
+    // reproductor: ◀ ▶ retroceden y avanzan si el vídeo es accesible
+    if (playerBox && (dir === 'left' || dir === 'right') && cur && (cur.tagName === 'IFRAME' || cur.tagName === 'VIDEO')) {
+      var r = media(dir === 'left' ? 'rw' : 'ff');
+      if (r && r.noseek) Bridge.osd('Para avanzar usa el cursor: mantén OK');
+      return true;
+    }
     var list = candidates();
     if (!cur || !document.contains(cur) || list.indexOf(cur) < 0) {
       if (cur) cur.classList.remove('tvnav-focus', 'tvnav-card');
@@ -350,6 +357,7 @@
       return true;
     }
     // Sin destino en esa dirección:
+    if (dir === 'left' && playerBox) return true;
     if (dir === 'left') {
       var btnL = carouselButton(cur, 'left');
       if (btnL && clippedBy(cur)) { btnL.click(); return true; }
@@ -380,6 +388,7 @@
   function activate() {
     addStyle();
     if (menuOpen) { menuActivate(); return null; }
+    if (playerBox && cur && (cur.tagName === 'IFRAME' || cur.tagName === 'VIDEO')) return media('toggle');
     if (!cur || !document.contains(cur)) { move('down'); return null; }
     var el = cur;
     if (el.tagName === 'IFRAME' || el.tagName === 'VIDEO') {
@@ -450,31 +459,63 @@
 
   // ------------------------------------------------------------ vídeo
 
+  // Busca el vídeo que se puede controlar: en la página o dentro de reproductores del mismo dominio.
+  function allVideos(doc, depth, out) {
+    out = out || [];
+    var v = doc.querySelectorAll('video');
+    for (var i = 0; i < v.length; i++) out.push(v[i]);
+    if (depth < 3) {
+      var f = doc.querySelectorAll('iframe');
+      for (var j = 0; j < f.length; j++) {
+        try { var d = f[j].contentDocument; if (d) allVideos(d, depth + 1, out); } catch (e) {}   // otro dominio: inaccesible
+      }
+    }
+    return out;
+  }
+
   function mainVideo() {
-    var vids = document.querySelectorAll('video'), best = null, area = 0;
+    var vids = allVideos(document, 0), best = null, area = 0;
     for (var i = 0; i < vids.length; i++) {
-      var r = vids[i].getBoundingClientRect(), a = r.width * r.height;
+      if (isTrailerEl(vids[i])) continue;
       if (!vids[i].paused) return vids[i];
-      if (a > area) { area = a; best = vids[i]; }
+      var r = vids[i].getBoundingClientRect(), a = r.width * r.height;
+      if (a >= area) { area = a; best = vids[i]; }
     }
     return best;
   }
 
+  function isTrailerEl(el) {
+    return !!(el.closest && el.closest('[class*="trailer"],[id*="trailer"]'));
+  }
+
   function mainPlayerFrame() {
+    if (playerMedia && document.contains(playerMedia)) return playerMedia;
     var ifr = document.querySelectorAll('iframe'), best = null, area = 0;
     for (var i = 0; i < ifr.length; i++) {
       var r = ifr[i].getBoundingClientRect(), a = r.width * r.height;
-      if (r.width >= 200 && r.height >= 120 && a > area && visible(ifr[i])) { area = a; best = ifr[i]; }
+      if (r.width >= 200 && r.height >= 120 && a > area && visible(ifr[i]) && !isTrailerEl(ifr[i])) { area = a; best = ifr[i]; }
     }
     return best;
+  }
+
+  function fmt(t) {
+    t = Math.max(0, Math.floor(t || 0));
+    var h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sec = t % 60;
+    return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
   }
 
   function media(action) {
     var v = mainVideo();
     if (v) {
-      if (action === 'toggle') { if (v.paused) v.play(); else v.pause(); }
-      else if (action === 'ff') v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10);
-      else if (action === 'rw') v.currentTime = Math.max(0, v.currentTime - 10);
+      if (action === 'toggle') {
+        if (v.paused || v.ended) { try { var pr = v.play(); if (pr && pr['catch']) pr['catch'](function () {}); } catch (e) {} Bridge.osd('▶  Reproduciendo'); }
+        else { v.pause(); Bridge.osd('❚❚  Pausa  ·  ' + fmt(v.currentTime) + (v.duration ? ' / ' + fmt(v.duration) : '')); }
+      } else if (action === 'ff' || action === 'rw') {
+        var step = action === 'ff' ? 10 : -10;
+        var to = Math.max(0, Math.min((v.duration || 1e9) - 1, v.currentTime + step));
+        v.currentTime = to;
+        Bridge.osd((step > 0 ? '+10 s  ▶▶  ' : '◀◀  −10 s  ') + fmt(to) + (v.duration ? ' / ' + fmt(v.duration) : ''));
+      }
       return { ok: true };
     }
     var f = mainPlayerFrame();
@@ -615,7 +656,49 @@
   // ------------------------------------------------------------ modo reproductor (#tvplay)
 
   var playerMode = location.hash === '#tvplay';
-  var playerBox = null;
+  var playerBox = null, playerMedia = null;
+
+  // Pantalla completa: el navegador solo la permite tras un gesto del usuario, así que se pide a la app
+  // un clic real sobre una capa transparente que, al recibirlo, pone el reproductor a pantalla completa.
+  function goFullscreen(media) {
+    if (!Bridge.click) return;
+    var vid = media.tagName === 'VIDEO' ? media : null;
+    var target = vid || media;
+    var c = document.createElement('div');
+    c.id = 'tvfs-catcher';
+    c.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2147483647;background:transparent;visibility:visible';
+    var done = false;
+    function handler(e) {
+      if (done) return; done = true;
+      try { e.preventDefault(); e.stopPropagation(); } catch (x) {}
+      var fn = target.requestFullscreen || target.webkitRequestFullscreen || target.webkitRequestFullScreen || target.mozRequestFullScreen;
+      try {
+        if (fn) { var pr = fn.call(target); if (pr && pr['catch']) pr['catch'](function () {}); }
+        else if (vid && vid.webkitEnterFullscreen) vid.webkitEnterFullscreen();
+      } catch (x) {}
+      setTimeout(function () { if (c.parentNode) c.parentNode.removeChild(c); }, 50);
+    }
+    c.addEventListener('click', handler, true);
+    c.addEventListener('mouseup', handler, true);
+    c.addEventListener('touchend', handler, true);
+    (document.body || document.documentElement).appendChild(c);
+    var x = Math.round(window.innerWidth / 2), y = Math.round(window.innerHeight / 2);
+    Bridge.click(x * dpr(), y * dpr());
+    setTimeout(function () { if (c.parentNode) c.parentNode.removeChild(c); }, 2500);
+  }
+
+  function autoStart(media) {
+    var v = mainVideo();
+    if (v) {
+      // vídeo accesible: se reproduce directamente
+      if (v.paused) { try { var pr = v.play(); if (pr && pr['catch']) pr['catch'](function () {}); } catch (e) {} }
+      setTimeout(function () { goFullscreen(v.ownerDocument === document ? v : media); }, 300);
+    } else {
+      // reproductor de otro servidor: un clic en el centro lo pone en marcha
+      if (Bridge.click) { var t = tapOf(media); Bridge.click(t.x, t.y); }
+      setTimeout(function () { goFullscreen(media); }, 1200);
+    }
+  }
 
   function startPlayer() {
     var st = document.createElement('style');
@@ -624,6 +707,7 @@
       'display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;',
       'font-family:system-ui,Roboto,Arial,sans-serif;visibility:visible !important}',
       '#tvplay-wait *{visibility:visible !important}',
+      '#tvfs-catcher{visibility:visible !important}',
       '#tvplay-wait .sp{width:56px;height:56px;border-radius:50%;border:6px solid rgba(255,255,255,.15);',
       'border-top-color:#FFC107;animation:tvspin .8s linear infinite;-webkit-animation:tvspin .8s linear infinite}',
       '@keyframes tvspin{to{transform:rotate(360deg)}}@-webkit-keyframes tvspin{to{-webkit-transform:rotate(360deg)}}',
@@ -680,12 +764,13 @@
       if (!box || !box.contains(media)) box = media.parentElement || media;
       if (box === document.body) box = media;
       playerBox = box;
+      playerMedia = media;
       box.classList.add('tvplay-box');
       document.documentElement.classList.add('tvplay');
       if (wait.parentNode) wait.parentNode.removeChild(wait);
       cur = null;
       setFocus(media);
-      if (media.tagName === 'VIDEO') { try { media.play(); } catch (e) {} }
+      setTimeout(function () { autoStart(media); }, 900);
     }
     clickPlay();
     var tries = 0;
@@ -709,6 +794,7 @@
     back: back,
     media: media,
     refresh: refresh,
+    isPlayer: function () { return !!playerMode; },
     openMenu: openMenu
   };
 

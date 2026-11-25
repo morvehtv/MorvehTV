@@ -497,7 +497,7 @@ public class MainActivity extends Activity {
                 }
             } else if (!centerLongHandled && !e.isCanceled()) {
                 if (cursorMode) clickAtCursor();
-                else if (customView != null) tapCenter(customView);
+                else if (customView != null) media("toggle");
                 else activate();
             }
             return true;
@@ -509,8 +509,10 @@ public class MainActivity extends Activity {
             return true;
         }
         if (customView != null) {
-            // En pantalla completa las flechas activan el cursor para usar los controles del reproductor.
-            if (first) {
+            // Pantalla completa: ◀ ▶ retroceden/avanzan; ▲ ▼ activan el cursor para los controles del reproductor.
+            if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                if (down) media(code == KeyEvent.KEYCODE_DPAD_LEFT ? "rw" : "ff");
+            } else if (first) {
                 setCursorMode(true);
                 moveCursor(code, 0);
             }
@@ -536,6 +538,7 @@ public class MainActivity extends Activity {
             js("document.fullscreenElement && document.exitFullscreen()");
             exitFullscreen();
             setCursorMode(false);
+            js("window.__tvnav && __tvnav.isPlayer && __tvnav.isPlayer() && __tvnav.back()");
             return;
         }
         if (cursorMode) {
@@ -569,17 +572,19 @@ public class MainActivity extends Activity {
     }
 
     private void media(String action) {
-        if (customView != null && "toggle".equals(action)) {
-            tapCenter(customView);
-            return;
-        }
         web.evaluateJavascript("window.__tvnav ? JSON.stringify(__tvnav.media('" + action + "')) : null", r -> {
             JSONObject o = parseJsResult(r);
-            if (o == null) return;
-            if (o.optBoolean("tap")) {
-                tapAt(web, (float) o.optDouble("x"), (float) o.optDouble("y"));
-            } else if (o.optBoolean("noseek")) {
+            if (o != null && o.optBoolean("ok")) return;          // el vídeo se controló directamente
+            if (o != null && o.optBoolean("noseek")) {
                 showToast(getString(R.string.seek_hint), 3000);
+                return;
+            }
+            if (!"toggle".equals(action)) return;
+            // reproductor de otro servidor: un clic en el centro pausa o reanuda
+            if (customView != null) {
+                tapCenter(customView);
+            } else if (o != null && o.optBoolean("tap")) {
+                tapAt(web, (float) o.optDouble("x"), (float) o.optDouble("y"));
             }
         });
     }
@@ -605,16 +610,29 @@ public class MainActivity extends Activity {
     /** Simula un toque real (cuenta como gesto del usuario, útil para reproductores). */
     private void tapAt(View target, float x, float y) {
         final long t = SystemClock.uptimeMillis();
-        MotionEvent d = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0);
-        d.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        MotionEvent d = pointerEvent(t, t, MotionEvent.ACTION_DOWN, x, y);
         target.dispatchTouchEvent(d);
         d.recycle();
         handler.postDelayed(() -> {
-            MotionEvent u = MotionEvent.obtain(t, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y, 0);
-            u.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            MotionEvent u = pointerEvent(t, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y);
             target.dispatchTouchEvent(u);
             u.recycle();
         }, 60);
+    }
+
+    /** Evento de puntero tipo ratón: en los reproductores equivale a un clic real (pausa/reproduce). */
+    private static MotionEvent pointerEvent(long down, long when, int action, float x, float y) {
+        MotionEvent.PointerProperties[] pp = { new MotionEvent.PointerProperties() };
+        pp[0].id = 0;
+        pp[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+        MotionEvent.PointerCoords[] pc = { new MotionEvent.PointerCoords() };
+        pc[0].x = x;
+        pc[0].y = y;
+        pc[0].pressure = 1f;
+        pc[0].size = 1f;
+        int buttons = action == MotionEvent.ACTION_UP ? 0 : MotionEvent.BUTTON_PRIMARY;
+        return MotionEvent.obtain(down, when, action, 1, pp, pc, 0, buttons, 1f, 1f, 0, 0,
+                android.view.InputDevice.SOURCE_MOUSE, 0);
     }
 
     // ------------------------------------------------------------------ modo cursor
@@ -725,6 +743,18 @@ public class MainActivity extends Activity {
                 if (playing) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else if (customView == null) getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             });
+        }
+
+        /** Clic real (cuenta como gesto del usuario) en coordenadas de pantalla de la web. */
+        @JavascriptInterface
+        public void click(float x, float y) {
+            handler.post(() -> tapAt(web, x, y));
+        }
+
+        /** Aviso breve en pantalla (visible también a pantalla completa). */
+        @JavascriptInterface
+        public void osd(String msg) {
+            handler.post(() -> showToast(msg, 1500));
         }
 
         @JavascriptInterface
